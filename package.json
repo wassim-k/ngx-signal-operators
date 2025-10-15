@@ -1,6 +1,6 @@
 {
   "name": "ngx-signal-operators",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Transform Angular signals with functional operators.",
   "license": "MIT",
   "sideEffects": false,
@@ -22,7 +22,8 @@
     "ng": "ng",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:spec": "node --inspect-brk ./node_modules/@angular/cli/bin/ng test"
   },
   "peerDependencies": {
     "@angular/core": ">=17.0.0"

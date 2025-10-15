@@ -41,7 +41,7 @@ effect(() => {
     return;
   }
 
-  console.log($`Input changed to: ${value}`);
+  console.log(`Input changed to: ${value}`);
 });
 ```
 
@@ -53,7 +53,7 @@ const input = signal('');
 
 effectWith(input)
   .skip(1)
-  .run(value => console.log($`Input changed to: ${value}`));
+  .run(value => console.log(`Input changed to: ${value}`));
 ```
 
 #### 2. Debounce `computed` value
@@ -135,6 +135,8 @@ effectWith(temperature)
   });
 ```
 
+> **💡 Performance Tip:** For optimal performance, add `{ untracked: true }` to the `run()` options unless you need to track additional signals inside your effect. See [Untracked Effects](#untracked-effects) for details.
+
 ### Under the Hood
 `effectWith` is implemented using a single `effect` and a pipeline pattern, it roughly translates to this:
 
@@ -147,7 +149,7 @@ Each operator decides whether to call the next operator and so on, until the `ru
 ### Timing
 `effect`s called from an Angular component run during the change detection stage of the component's lifecycle.
 
-`effect`s called from outside an Angular component or with `forceRoot` option run as a microtask.
+`effect`s called from outside an Angular component run as a microtask.
 
 `effectWith` operates on each one of those **effect runs**.
 
@@ -240,7 +242,7 @@ const input = signal('');
 const effectRef = effectWith(input)
   .filter(value => value.length > 0)
   .run(
-    (value, { onCleanup, effectRef }: EffectWithContext) => {
+    (value, { onCleanup, effectRef }) => {
       // Register cleanup logic if needed
       onCleanup(() => {
         console.log('Cleaning up after:', value);
@@ -256,9 +258,41 @@ Parameters:
   - `context`: An object with:
     - `onCleanup`: Function to register cleanup handlers
     - `effectRef`: Reference to the effect instance
-- `options`: [`CreateEffectOptions`](https://angular.dev/api/core/CreateEffectOptions)
+- `options`:
+  - extends [`CreateEffectOptions`](https://angular.dev/api/core/CreateEffectOptions)
+  - `untracked?: boolean` - Wrap the effect pipeline with `untracked(() => ...).
 
 Returns an `EffectRef` that can be used to destroy the effect manually.
+
+### Untracked Effects
+
+By default, Angular's `effect` tracks all signal reads within its callback. This means any signal accessed inside your effect will create a dependency, causing the effect to re-run whenever those signals change, even if you only want to react to changes in your input signal(s).
+
+If you only want to react to changes in `effectWith` input signal(s) then set `untracked: true` option.
+
+```typescript
+// effect ONLY runs when input changes
+effectWith(input)
+  .run(
+    value => console.log(value, other()), // Changes to `other` signal will not re-run the effect.
+    { untracked: true }
+  );
+```
+
+This automatically wraps the effect pipeline in Angular's `untracked()`, preventing unwanted reactive dependencies and improving performance.
+
+#### Automatic Effect Splitting
+When `untracked: true` `(default)` combining synchronous and asynchronous operators (like `debounce`), the library automatically splits the pipeline into two effects connected by a bridge signal. This maintains reactivity across async contexts:
+
+```typescript
+effectWith(input)
+  .map(x => x * 2)      // Synchronous - runs in effect 1
+  .debounce(500)        // Async boundary - automatic split
+  .filter(x => x > 10)  // Synchronous - runs in effect 2
+  .run(value => console.log(value, other())); // Changes to `other` signal re-runs the effect.
+```
+
+The split happens transparently, maintaining reactivity across async contexts.
 
 ## `computedWith`
 
@@ -367,7 +401,7 @@ input.set('ab'); // Resets the 500ms timer
 
 Signals always have a value, using `debounce` with `computedWith` returns the initial signal value instantly, then debounces future value changes.
 
-`debounce` uses an `effect` internally. The internal `effect` is automatically cleaned-up when the component is destroyed, but it can be done manually by calling `computedWithSignal.destroy()`.
+`debounce` uses an internal `effect` which is automatically cleaned up when the component is destroyed, but it can be done manually by calling `computedWithSignal.destroy()`.
 
 #### default
 Replace `SKIPPED` with the specified default value.

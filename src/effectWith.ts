@@ -1,15 +1,25 @@
-import { CreateEffectOptions, effect, EffectCleanupRegisterFn, EffectRef, Signal } from '@angular/core';
+import { CreateEffectOptions, effect, EffectCleanupRegisterFn, EffectRef, signal, untracked } from '@angular/core';
 import { createFilterOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
 import { ExcludeSkipped, SignalLike, SignalValues, SKIPPED } from './types';
 
-type EffectPipeline<T> = (next: EffectPipelineNext<T>, ctx: EffectPipelineContext) => void;
+type EffectPipeline<T, R> = (next: EffectPipelineNext<R>) => EffectPipelineNext<T>;
 
 type EffectPipelineNext<T> = (value: T, ctx: EffectPipelineContext) => void;
+
+export interface EffectRunOptions extends CreateEffectOptions {
+  /**
+   * Wrap effect pipeline with `untracked(() => ...)`
+   */
+  untracked?: boolean;
+}
 
 export interface EffectPipelineContext {
   onCleanup: EffectCleanupRegisterFn;
   effectRef: EffectRef;
 }
+
+const asAsync = <TFunc extends Function>(fn: TFunc) => Object.assign(fn, { __async: true });
+const isAsync = <TFunc extends Function>(fn: TFunc) => '__async' in fn;
 
 /**
  * Creates an `effect` pipeline that can be composed with various operators.
@@ -18,17 +28,20 @@ export function effectWith<T>(signal: SignalLike<T>): EffectPipelineBuilder<Excl
 export function effectWith<Signals extends Array<SignalLike>>(...signals: Signals): EffectPipelineBuilder<SignalValues<Signals>>;
 export function effectWith(...signals: Array<SignalLike>): any {
   const source = signals.length === 1 ? signals[0] : () => signals.map(s => s());
-  return new EffectPipelineBuilder((next, ctx) => excludeSkipped(next)(source(), ctx));
+  return new EffectPipelineBuilder(source, [excludeSkipped]);
 }
 
 export class EffectPipelineBuilder<T> {
-  public constructor(private readonly pipeline: EffectPipeline<T>) { }
+  public constructor(
+    private readonly source: SignalLike<any>,
+    private readonly operators: Array<EffectPipeline<any, any>>
+  ) { }
 
   /**
    * Delay effect run by the specified milliseconds.
    */
   public debounce(delay: number): EffectPipelineBuilder<T> {
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => {
+    return this.pipe(asAsync(next => (value, ctx) => {
       let timer: ReturnType<typeof setTimeout> | null = null;
 
       timer = setTimeout(() => {
@@ -42,7 +55,7 @@ export class EffectPipelineBuilder<T> {
           timer = null;
         }
       });
-    }, ctx));
+    }));
   }
 
   /**
@@ -52,19 +65,19 @@ export class EffectPipelineBuilder<T> {
   public filter(predicate: (value: T) => boolean): EffectPipelineBuilder<T>;
   public filter(predicate: (value: T) => boolean): EffectPipelineBuilder<T> {
     const filter = createFilterOperator(predicate);
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => {
+    return this.pipe(next => (value, ctx) => {
       const result = filter(value);
       if (result !== SKIPPED) {
         next(result, ctx);
       }
-    }, ctx));
+    });
   }
 
   /**
    * Map values using a mapping function.
    */
   public map<R>(fn: (value: T) => R): EffectPipelineBuilder<R> {
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => next(fn(value), ctx), ctx));
+    return this.pipe(next => (value, ctx) => next(fn(value), ctx));
   }
 
   /**
@@ -74,7 +87,7 @@ export class EffectPipelineBuilder<T> {
    */
   public pair(): EffectPipelineBuilder<[T, T | undefined]> {
     const pair = createPairOperator<T>();
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => next(pair(value), ctx), ctx));
+    return this.pipe(next => (value, ctx) => next(pair(value), ctx));
   }
 
   /**
@@ -82,12 +95,12 @@ export class EffectPipelineBuilder<T> {
    */
   public skip(n: number): EffectPipelineBuilder<T> {
     const skip = createSkipOperator<T>(n);
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => {
+    return this.pipe(next => (value, ctx) => {
       const result = skip(value);
       if (result !== SKIPPED) {
         next(result, ctx);
       }
-    }, ctx));
+    });
   }
 
   /**
@@ -95,28 +108,63 @@ export class EffectPipelineBuilder<T> {
    */
   public take(n: number): EffectPipelineBuilder<T> {
     const take = createTakeOperator<T>(n);
-    return new EffectPipelineBuilder((next, ctx) => this.pipeline((value, ctx) => {
+    return this.pipe(next => (value, ctx) => {
       const result = take(value);
       if (result !== SKIPPED) {
         next(result, ctx);
       } else {
         ctx.effectRef.destroy();
       }
-    }, ctx));
+    });
   }
 
   /**
    * Run the effect with the configured operators.
    */
-  public run(fn: EffectPipelineNext<T>, options?: CreateEffectOptions): EffectRef {
-    const effectRef = effect(onCleanup => this.pipeline(fn, { onCleanup, effectRef }), options);
+  public run(fn: EffectPipelineNext<T>, options?: EffectRunOptions): EffectRef {
+    if (options?.untracked === true) {
+      return this.runEffect([untrack, ...this.operators], fn, options);
+    }
+
+    const asyncIdx = this.operators.findIndex(isAsync);
+    if (asyncIdx === -1) {
+      return this.runEffect(this.operators, fn, options);
+    } else {
+      const bridge = signal<any>(SKIPPED as any, { equal: () => false });
+      const effect1 = this.runEffect(this.operators.slice(0, asyncIdx + 1), value => bridge.set(value), options);
+      const effect2 = new EffectPipelineBuilder<T>(bridge, [excludeSkipped, ...this.operators.slice(asyncIdx + 1)]).run(fn, options);
+      return combineEffects(effect1, effect2);
+    }
+  }
+
+  private runEffect(operators: Array<EffectPipeline<any, any>>, fn: EffectPipelineNext<any>, options?: CreateEffectOptions): EffectRef {
+    const pipeline = operators.reduceRight((next, op) => op(next), fn);
+    const effectRef = effect(onCleanup => pipeline(this.source(), { onCleanup, effectRef }), options);
     return effectRef;
+  }
+
+  private pipe<R>(operator: EffectPipeline<T, R>): EffectPipelineBuilder<R> {
+    return new EffectPipelineBuilder<R>(this.source, [...this.operators, operator]);
   }
 }
 
-function excludeSkipped<T>(next: EffectPipelineNext<T>): EffectPipelineNext<T> {
+function excludeSkipped(next: EffectPipelineNext<any>): EffectPipelineNext<any> {
   return (value, ctx) => {
     if (value === SKIPPED) return;
     next(value, ctx);
+  };
+}
+
+function untrack(next: EffectPipelineNext<any>): EffectPipelineNext<any> {
+  return (value, ctx) => untracked(() => next(value, ctx));
+}
+
+function combineEffects(...effectRefs: Array<EffectRef>): EffectRef {
+  return {
+    destroy: () => {
+      for (const effectRef of effectRefs) {
+        effectRef.destroy();
+      }
+    }
   };
 }

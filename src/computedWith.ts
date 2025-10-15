@@ -94,7 +94,7 @@ function buildComputedWithSignal<T>(
         const output = signal(source());
         effectRefs.push(effectWith(source)
           .debounce(delay)
-          .run(value => output.set(value), { injector: options?.injector, forceRoot: true }));
+          .run(value => output.set(value), { injector: options?.injector, untracked: true }));
         return buildComputedWithSignal(output, options, effectRefs);
       },
       filter(predicate: (value: ExcludeSkipped<T>) => boolean) {
@@ -159,7 +159,6 @@ function computedWithLastValue<T, R>(
       : (lastValue = newValue)) as R;
   }, options);
 }
-
 
 function mergeOptions<T, R>(
   options: ComputedWithOptions | undefined,

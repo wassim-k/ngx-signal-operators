@@ -82,6 +82,71 @@ describe('effectWith', () => {
     });
   }));
 
+  for (const untracked of [true, false]) {
+    it(`should support ${untracked ? 'untracked' : 'reactive'} run block when using debounce`, fakeAsync(() => {
+      runInInjectionContext(injector, () => {
+        const source = signal(10);
+        const other = signal(0);
+        const mockFn = jest.fn();
+
+        effectWith(source)
+          .map(value => value + other())
+          .debounce(500)
+          .map(value => value + other())
+          .debounce(500)
+          .map(value => value + other())
+          .run(value => mockFn(value + other()), { untracked });
+
+        // The effect is scheduled but not immediately executed.
+        expect(mockFn).not.toHaveBeenCalled();
+
+        // Advance time partially.
+        tick(500);
+        expect(mockFn).not.toHaveBeenCalled();
+
+        // Advance time to complete the debounce period.
+        tick(500);
+        expect(mockFn).toHaveBeenCalledWith(10);
+
+        // Update the source to trigger a new debounced effect.
+        source.set(20);
+        tick(1000);
+        expect(mockFn).toHaveBeenCalledWith(20);
+
+        // Update the other signal to see if it's tracked or not.
+        other.set(1);
+        flush();
+        expect(mockFn).toHaveBeenCalledWith(untracked ? 20 : 24);
+      });
+    }));
+  }
+
+  it(`should run effect across async context even if transformed value has not changed`, fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(1);
+      const mockFn = jest.fn();
+
+      effectWith(source)
+        .map(() => 1 /* Always return the same value */)
+        .debounce(500)
+        .run(value => mockFn(value));
+
+      // The effect is scheduled but not immediately executed.
+      expect(mockFn).not.toHaveBeenCalled();
+
+      // Advance time to complete the debounce period.
+      tick(500);
+      expect(mockFn).toHaveBeenCalledWith(1);
+
+      // Update the source to trigger a new debounced effect.
+      source.set(2);
+      tick(500);
+      expect(mockFn).toHaveBeenCalledWith(1);
+
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+  }));
+
   it('should pair each value with its previous value', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
@@ -130,6 +195,24 @@ describe('effectWith', () => {
     });
   }));
 
+  it('should run even if map operator returns the same value', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(1);
+      const mockFn = jest.fn();
+
+      effectWith(source)
+        .map(value => value)
+        .run(value => mockFn(value));
+
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(1);
+
+      source.set(2);
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(1);
+    });
+  }));
+
   it('should work with multiple signals and aggregate their values', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const a = signal(1);
@@ -141,7 +224,7 @@ describe('effectWith', () => {
       effectWith(() => [a(), b()] as const).run((values: readonly [number, number]) => derivedSignalMock(values));
 
       const testCases = [
-        { description: 'Initial values', update: () => {}, expected: [1, 2] },
+        { description: 'Initial values', update: () => { }, expected: [1, 2] },
         { description: 'After updating a', update: () => a.set(3), expected: [3, 2] },
         { description: 'After updating b', update: () => b.set(4), expected: [3, 4] }
       ];
@@ -218,7 +301,7 @@ describe('effectWith', () => {
     });
   }));
 
-  it('should work in a chain with other effect withs', fakeAsync(() => {
+  it('should work with an operator pipeline', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(5);
       const mockFn = jest.fn();
