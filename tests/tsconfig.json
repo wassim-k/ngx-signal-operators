@@ -1,9 +1,16 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "emitDecoratorMetadata": true,
     "types": [
-      "jest"
-    ]
-  }
+      "vitest/globals"
+    ],
+    "paths": {
+      "ngx-signal-operators": [
+        "../src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.spec.ts"
+  ]
 }

@@ -3,21 +3,21 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "ng test",
       "type": "node",
       "request": "launch",
-      "name": "Test File",
-      "program": "${workspaceFolder}/node_modules/.bin/ng",
-      "args": [
-        "test",
-        "--test-match=\"**/${relativeFile}\"",
-        "--run-in-band",
-        "--no-cache"
-      ],
+      "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
-      "windows": {
-        "program": "${workspaceFolder}/node_modules/@angular/cli/bin/ng",
-      }
+      "program": "${workspaceFolder}/node_modules/@angular/cli/bin/ng.js",
+      "args": [
+        "test",
+        "--debug"
+      ],
+      "skipFiles": [
+        "<node_internals>/**",
+        "${webRoot}/node_modules/rxjs/**"
+      ]
     }
   ]
 }

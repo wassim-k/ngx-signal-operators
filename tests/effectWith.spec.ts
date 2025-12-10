@@ -1,6 +1,6 @@
 import { Injector, runInInjectionContext, signal } from '@angular/core';
-import { TestBed, fakeAsync, flush, tick } from '@angular/core/testing';
-import { effectWith, SKIPPED } from '../src';
+import { fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
+import { effectWith, SKIPPED } from 'ngx-signal-operators';
 
 describe('effectWith', () => {
   let injector: Injector;
@@ -13,7 +13,7 @@ describe('effectWith', () => {
   it('should run the effect with the aggregated signal value', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(0);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // Create an effect with no intermediate operators.
       effectWith(source).run(value => {
@@ -34,7 +34,7 @@ describe('effectWith', () => {
   it('should support the skip operator to ignore the first emission', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // With skip(1), the first emission after registration is skipped.
       effectWith(source).skip(1).run(value => {
@@ -58,7 +58,7 @@ describe('effectWith', () => {
   it('should support the debounce operator to delay effect execution', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(10);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source).debounce(1000).run(value => {
         mockFn(value);
@@ -87,7 +87,7 @@ describe('effectWith', () => {
       runInInjectionContext(injector, () => {
         const source = signal(10);
         const other = signal(0);
-        const mockFn = jest.fn();
+        const mockFn = vitest.fn();
 
         effectWith(source)
           .map(value => value + other())
@@ -124,7 +124,7 @@ describe('effectWith', () => {
   it(`should run effect across async context even if transformed value has not changed`, fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source)
         .map(() => 1 /* Always return the same value */)
@@ -150,7 +150,7 @@ describe('effectWith', () => {
   it('should pair each value with its previous value', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source)
         .pair()
@@ -176,7 +176,7 @@ describe('effectWith', () => {
   it('should support map operator to map values', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source)
         .map(value => value * 2)
@@ -198,7 +198,7 @@ describe('effectWith', () => {
   it('should run even if map operator returns the same value', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source)
         .map(value => value)
@@ -217,8 +217,8 @@ describe('effectWith', () => {
     runInInjectionContext(injector, () => {
       const a = signal(1);
       const b = signal(2);
-      const directSignalsMock = jest.fn();
-      const derivedSignalMock = jest.fn();
+      const directSignalsMock = vitest.fn();
+      const derivedSignalMock = vitest.fn();
 
       effectWith(a, b).run((values: [number, number]) => directSignalsMock(values));
       effectWith(() => [a(), b()] as const).run((values: readonly [number, number]) => derivedSignalMock(values));
@@ -240,7 +240,7 @@ describe('effectWith', () => {
 
   it('should work outside an injection context', fakeAsync(() => {
     const source = signal(100);
-    const mockFn = jest.fn();
+    const mockFn = vitest.fn();
 
     // Pass the dummy injector in the options.
     effectWith(source).run(
@@ -261,7 +261,7 @@ describe('effectWith', () => {
   it('should only call the effect callback when the predicate is true', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(0);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // Filter: only pass even numbers.
       effectWith(source)
@@ -290,7 +290,7 @@ describe('effectWith', () => {
   it('should narrow types using filter correctly', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal<number | string>(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       effectWith(source)
         .filter((value): value is number => typeof value === 'number')
@@ -304,7 +304,7 @@ describe('effectWith', () => {
   it('should work with an operator pipeline', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(5);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // Chain: first filter out odd numbers, then debounce.
       effectWith(source)
@@ -335,7 +335,7 @@ describe('effectWith', () => {
   it('should call the cleanup function when the effect is destroyed', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(1);
-      const cleanupFn = jest.fn();
+      const cleanupFn = vitest.fn();
 
       const effectRef = effectWith(source).run((value, { onCleanup }) => {
         onCleanup(cleanupFn);
@@ -354,7 +354,7 @@ describe('effectWith', () => {
   it('should take only the specified number of emissions and then stop the effect', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal(0);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // Allow only 3 emissions
       effectWith(source)
@@ -392,7 +392,7 @@ describe('effectWith', () => {
   it('should not execute effect for SKIPPED values', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal<number | typeof SKIPPED>(1);
-      const mockFn = jest.fn();
+      const mockFn = vitest.fn();
 
       // Create an effect that should only run for non-SKIPPED values
       effectWith(source).run(value => {

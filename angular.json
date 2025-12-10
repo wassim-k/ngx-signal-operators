@@ -8,14 +8,11 @@
     "ngx-signal-operators": {
       "projectType": "library",
       "root": ".",
-      "sourceRoot": "src",
+      "sourceRoot": ".",
       "prefix": "lib",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:ng-packagr",
-          "options": {
-            "project": "ng-package.json"
-          },
+          "builder": "@angular/build:ng-packagr",
           "configurations": {
             "production": {
               "tsConfig": "tsconfig.prod.json"
@@ -26,14 +23,23 @@
           },
           "defaultConfiguration": "production"
         },
+        "build-test": {
+          "builder": "@angular/build:application",
+          "options": {
+            "index": false,
+            "browser": "src/index.ts",
+            "polyfills": ["@analogjs/vitest-angular/setup-zone"],
+            "tsConfig": "tsconfig.json"
+          }
+        },
         "test": {
-          "builder": "@angular-builders/jest:run",
+          "builder": "@angular/build:unit-test",
           "options": {
             "tsConfig": "tests/tsconfig.json",
-            "polyfills": [
-              "zone.js",
-              "zone.js/testing"
-            ]
+            "buildTarget": ":build-test",
+            "runner": "vitest",
+            "dumpVirtualFiles": true,
+            "runnerConfig": true
           }
         }
       }

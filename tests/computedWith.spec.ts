@@ -1,6 +1,6 @@
 import { Injector, runInInjectionContext, signal } from '@angular/core';
 import { fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
-import { computedWith, SKIPPED } from '../src';
+import { computedWith, SKIPPED } from 'ngx-signal-operators';
 
 describe('computedWith', () => {
   let injector: Injector;
