@@ -1,25 +1,17 @@
 import { SKIPPED } from './types';
 
-export function createSkipOperator<V>(n: number): (value: V) => V | typeof SKIPPED {
+export function createSkipOperator<V>(n: number): (value: V) => boolean {
   if (n <= 0) {
     throw new Error('The number of skipped signal values must be greater than 0.');
   }
-  return (value: V) => {
-    return --n < 0 ? value : SKIPPED;
-  };
+  return (_value: V) => --n >= 0;
 }
 
-export function createTakeOperator<V>(n: number): (value: V) => V | typeof SKIPPED {
+export function createTakeOperator<V>(n: number): (value: V) => boolean {
   if (n <= 0) {
     throw new Error('The number of taken signal values must be greater than 0.');
   }
-  return (value: V) => {
-    return --n < 0 ? SKIPPED : value;
-  };
-}
-
-export function createFilterOperator<V>(predicate: (value: V) => boolean): (value: V) => V | typeof SKIPPED {
-  return (value: V) => predicate(value) ? value : SKIPPED;
+  return (_value: V) => --n >= 0;
 }
 
 export function createPairOperator<V>(): (value: V) => [V, V | undefined] {
@@ -28,5 +20,16 @@ export function createPairOperator<V>(): (value: V) => [V, V | undefined] {
     const pair: [V, V | undefined] = [value, prev];
     prev = value;
     return pair;
+  };
+}
+
+export function createDistinctOperator<V>(equal: (a: V, b: V) => boolean): (value: V) => boolean {
+  let prev: V | typeof SKIPPED = SKIPPED;
+  return (value: V) => {
+    if (prev === SKIPPED || !equal(value, prev)) {
+      prev = value;
+      return true;
+    }
+    return false;
   };
 }

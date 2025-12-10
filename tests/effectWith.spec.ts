@@ -421,4 +421,64 @@ describe('effectWith', () => {
       expect(mockFn).toHaveBeenCalledTimes(2); // Count still remains the same
     });
   }));
+
+  it('should use custom equality for objects with distinct', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal<{ id: number, name: string } | typeof SKIPPED>(SKIPPED);
+      const mockFn = vitest.fn();
+
+      effectWith(source)
+        .distinct((a, b) => a.id === b.id)
+        .run(value => mockFn(value));
+
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(0);
+
+      source.set({ id: 1, name: 'Alice' });
+      flush();
+      expect(mockFn).toHaveBeenCalledWith({ id: 1, name: 'Alice' });
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Same id, different name - should be skipped
+      source.set({ id: 1, name: 'Bob' });
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Different id - should pass through
+      source.set({ id: 2, name: 'Charlie' });
+      flush();
+      expect(mockFn).toHaveBeenCalledWith({ id: 2, name: 'Charlie' });
+      expect(mockFn).toHaveBeenCalledTimes(2);
+
+      source.set(SKIPPED);
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+  }));
+
+  it('should work with deep equality comparison using distinct', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal({ x: 1, y: 2 });
+      const mockFn = vitest.fn();
+
+      effectWith(source)
+        .distinct((a, b) => JSON.stringify(a) === JSON.stringify(b))
+        .run(value => mockFn(value));
+
+      flush();
+      expect(mockFn).toHaveBeenCalledWith({ x: 1, y: 2 });
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Deeply equal - should be skipped
+      source.set({ x: 1, y: 2 });
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Different - should pass through
+      source.set({ x: 1, y: 3 });
+      flush();
+      expect(mockFn).toHaveBeenCalledWith({ x: 1, y: 3 });
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+  }));
 });

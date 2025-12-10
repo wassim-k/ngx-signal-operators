@@ -1,6 +1,6 @@
 import { computed, CreateComputedOptions, EffectRef, Injector, isSignal, signal, Signal } from '@angular/core';
 import { effectWith } from './effectWith';
-import { createFilterOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
+import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
 import { ExcludeSkipped, SignalLike, SignalValues, SKIPPED } from './types';
 
 export interface ComputedWithOptions {
@@ -30,6 +30,13 @@ export type ComputedWithSignal<T> = Signal<T> & {
   skip(n: number): ComputedWithSignal<T | typeof SKIPPED>;
 
   /**
+   * Skip consecutive duplicate values based on a custom equality function.
+   *
+   * `equal` comparator is **mandatory** because signal values are inherently distinct e.g. `distinct((a, b) => a === b)` is redundant.
+   */
+  distinct(equal: (a: ExcludeSkipped<T>, b: ExcludeSkipped<T>) => boolean): ComputedWithSignal<T | Extract<T, typeof SKIPPED>>;
+
+  /**
    * Returns value as-is for the first N computations, then retains the N-th value for all subsequent computations.
    */
   take(n: number): ComputedWithSignal<T>;
@@ -40,7 +47,7 @@ export type ComputedWithSignal<T> = Signal<T> & {
   map<R>(fn: (value: ExcludeSkipped<T>) => R, options?: CreateComputedOptions<R | Extract<T, typeof SKIPPED>>): ComputedWithSignal<R | Extract<T, typeof SKIPPED>>;
 
   /**
-   * Pair each value with its previous value.
+   * Pair each value with its previous value `[current, previous | undefined]`.
    *
    * The first value will be paired with `undefined` (since there is no previous value).
    */
@@ -79,10 +86,10 @@ export function computedWith(...args: Array<any>): ComputedWithSignal<any> {
 
   const source = signals.length === 1 ? signals[0] : () => signals.map(s => s());
   const signal = isSignal(source) ? source : computed(source);
-  return buildComputedWithSignal(signal, options, []);
+  return lift(signal, options, []);
 }
 
-function buildComputedWithSignal<T>(
+function lift<T>(
   source: Signal<T>,
   options: ComputedWithOptions | undefined,
   effectRefs: Array<EffectRef>
@@ -95,45 +102,49 @@ function buildComputedWithSignal<T>(
         effectRefs.push(effectWith(source)
           .debounce(delay)
           .run(value => output.set(value), { injector: options?.injector, untracked: true }));
-        return buildComputedWithSignal(output, options, effectRefs);
+        return lift(output, options, effectRefs);
       },
       filter(predicate: (value: ExcludeSkipped<T>) => boolean) {
-        const filter = createFilterOperator(predicate);
-        const output = computedWithLastValue(source, value => filter(value as ExcludeSkipped<T>) === SKIPPED ? SKIPPED : value, options);
-        return buildComputedWithSignal(output, options, effectRefs);
+        const output = pipe(source, value => predicate(value) ? value : SKIPPED, options);
+        return lift(output, options, effectRefs);
       },
       skip(n: number) {
         const skip = createSkipOperator<T>(n);
-        const output = computedWithLastValue(source, value => skip(value) === SKIPPED ? SKIPPED : value, options);
-        return buildComputedWithSignal(output, options, effectRefs);
+        const output = pipe(source, value => skip(value) ? SKIPPED : value, options);
+        return lift(output, options, effectRefs);
+      },
+      distinct(equal: (a: ExcludeSkipped<T>, b: ExcludeSkipped<T>) => boolean) {
+        const distinct = createDistinctOperator(equal);
+        const output = pipe(source, value => distinct(value) ? value : SKIPPED as Extract<T, typeof SKIPPED>, options);
+        return lift(output, options, effectRefs);
       },
       take(n: number) {
         const take = createTakeOperator<T>(n);
-        const output = computedWithLastValue(source, value => {
-          if (take(value) === SKIPPED) {
+        const output = pipe(source, value => {
+          if (take(value)) {
+            return value;
+          } else {
             this.destroy();
             return SKIPPED;
-          } else {
-            return value;
           }
         }, options) as Signal<T>;
-        return buildComputedWithSignal(output, options, effectRefs);
+        return lift(output, options, effectRefs);
       },
       map<R>(fn: (value: ExcludeSkipped<T>) => R, computedOptions?: CreateComputedOptions<R | Extract<T, typeof SKIPPED>>) {
-        const output = computedWithLastValue(source, value => fn(value as ExcludeSkipped<T>), mergeOptions(options, computedOptions));
-        return buildComputedWithSignal(output, options, effectRefs);
+        const output = pipe(source, value => fn(value as ExcludeSkipped<T>), mergeOptions(options, computedOptions));
+        return lift(output, options, effectRefs);
       },
       pair() {
         const pair = createPairOperator<ExcludeSkipped<T>>();
-        const output = computedWithLastValue(source, pair, options);
-        return buildComputedWithSignal(output, options, effectRefs);
+        const output = pipe(source, pair, options);
+        return lift(output, options, effectRefs);
       },
       default<D = undefined>(defaultValue?: D) {
         const output = computed(() => {
           const value = source();
           return (value === SKIPPED ? defaultValue : value) as ExcludeSkipped<T> | D;
         }, options);
-        return buildComputedWithSignal(output, options, effectRefs);
+        return lift(output, options, effectRefs);
       },
       destroy() {
         for (const effectRef of effectRefs) {
@@ -144,7 +155,7 @@ function buildComputedWithSignal<T>(
   );
 }
 
-function computedWithLastValue<T, R>(
+function pipe<T, R>(
   source: SignalLike<T>,
   fn: (value: ExcludeSkipped<T>) => R,
   options: CreateComputedOptions<R | Extract<T, typeof SKIPPED>> | undefined

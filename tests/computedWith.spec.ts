@@ -381,4 +381,29 @@ describe('computedWith', () => {
       expect(evenPairs()).toEqual([4, 2]);
     });
   }));
+
+  it('should use custom equality for objects with distinct', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal<{ id: number, name: string } | typeof SKIPPED>(SKIPPED);
+      const result = computedWith(source)
+        .distinct((a, b) => a.id === b.id);
+
+      expect(result()).toEqual(SKIPPED);
+
+      source.set({ id: 1, name: 'Alice' });
+      expect(result()).toEqual({ id: 1, name: 'Alice' });
+
+      // Same id, different name - retains previous value
+      source.set({ id: 1, name: 'Bob' });
+      expect(result()).toEqual({ id: 1, name: 'Alice' });
+
+      // Different id - updates
+      source.set({ id: 2, name: 'Charlie' });
+      expect(result()).toEqual({ id: 2, name: 'Charlie' });
+
+      // Set to SKIPPED - retains previous value
+      source.set(SKIPPED);
+      expect(result()).toEqual({ id: 2, name: 'Charlie' });
+    });
+  }));
 });

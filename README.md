@@ -192,6 +192,31 @@ effectWith(input)
   });
 ```
 
+#### distinct
+Skip consecutive duplicate values based on a custom equality function.
+
+`equal` comparator is **mandatory** because signal values are inherently distinct e.g. `distinct((a, b) => a === b)` is redundant.
+
+```typescript
+// Distinct by property
+const source = signal({ id: 1, name: 'Alice' });
+
+effectWith(source)
+  .distinct((a, b) => a.id === b.id)
+  .run(value => {
+    console.log('New unique object:', value);
+  });
+
+// Deep equality
+const coords = signal({ x: 1, y: 2 });
+
+effectWith(coords)
+  .distinct(deepEqual)
+  .run(value => {
+    console.log('Coordinates changed:', value);
+  });
+```
+
 #### take
 Run effect N times before destroying it.
 
@@ -363,6 +388,28 @@ Returns `SKIPPED` for the first N computations, then passes through subsequent v
 ```typescript
 const input = signal(0);
 const skipFirst = computedWith(input).skip(1);
+```
+
+#### distinct
+Skip consecutive duplicate values based on a custom equality function.
+
+`equal` comparator is **mandatory** because signal values are inherently distinct e.g. `distinct((a, b) => a === b)` is redundant.
+
+```typescript
+const source = signal({ id: 1, name: 'Alice' });
+const uniqueById = computedWith(source)
+  .distinct((a, b) => a.id === b.id);
+
+source.set({ id: 1, name: 'Bob' });
+uniqueById(); // { id: 1, name: 'Alice' }
+
+source.set({ id: 2, name: 'Charlie' });
+uniqueById(); // { id: 2, name: 'Charlie' }
+
+// Deep equality
+const coords = signal({ x: 1, y: 2 });
+const uniqueCoords = computedWith(coords)
+  .distinct(deepEqual);
 ```
 
 #### take
