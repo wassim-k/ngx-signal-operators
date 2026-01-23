@@ -1,4 +1,4 @@
-import { computed, CreateComputedOptions, EffectRef, Injector, isSignal, signal, Signal } from '@angular/core';
+import { computed, CreateComputedOptions, EffectRef, Injector, isSignal, linkedSignal, signal, Signal, untracked } from '@angular/core';
 import { effectWith } from './effectWith';
 import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
 import { ExcludeSkipped, SignalLike, SignalValues, SKIPPED } from './types';
@@ -98,7 +98,7 @@ function lift<T>(
     source,
     {
       debounce(delay: number) {
-        const output = signal(source());
+        const output = linkedSignal(() => untracked(source)); // linkedSignal used for lazy evaluation
         effectRefs.push(effectWith(source)
           .debounce(delay)
           .run(value => output.set(value), { injector: options?.injector, untracked: true }));
