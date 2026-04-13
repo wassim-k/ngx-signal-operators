@@ -23,6 +23,21 @@ export function createPairOperator<V>(): (value: V) => [V, V | undefined] {
   };
 }
 
+export function createThrottleOperator<V>(duration: number): (value: V) => boolean {
+  if (duration <= 0) {
+    throw new Error('Throttle duration must be greater than 0.');
+  }
+  let lastTime = 0;
+  return (_value: V) => {
+    const now = Date.now();
+    if (now - lastTime >= duration) {
+      lastTime = now;
+      return true;
+    }
+    return false;
+  };
+}
+
 export function createDistinctOperator<V>(equal: (a: V, b: V) => boolean): (value: V) => boolean {
   let prev: V | typeof SKIPPED = SKIPPED;
   return (value: V) => {
