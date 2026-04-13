@@ -258,6 +258,21 @@ effectWith(input)
   });
 ```
 
+#### throttle
+Rate-limit effect runs by time window.
+
+Passes through the first value immediately, then ignores subsequent values for the specified duration.
+
+```typescript
+const scrollY = signal(0);
+
+effectWith(scrollY)
+  .throttle(200)
+  .run(value => {
+    console.log('Scroll position:', value);
+  });
+```
+
 #### run
 Executes the effect with the configured pipeline.
 
@@ -449,6 +464,16 @@ input.set('ab'); // Resets the 500ms timer
 Signals always have a value, using `debounce` with `computedWith` returns the initial signal value instantly, then debounces future value changes.
 
 `debounce` uses an internal `effect` which is automatically cleaned up when the component is destroyed, but it can be done manually by calling `computedWithSignal.destroy()`.
+
+#### throttle
+Rate-limit value changes by time window.
+
+Returns the initial signal value instantly, then throttles future value changes.
+
+```typescript
+const scrollY = signal(0);
+const throttledScrollY = computedWith(scrollY).throttle(200);
+```
 
 #### default
 Replace `SKIPPED` with the specified default value.

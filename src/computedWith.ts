@@ -1,6 +1,6 @@
 import { computed, CreateComputedOptions, EffectRef, Injector, isSignal, linkedSignal, signal, Signal, untracked } from '@angular/core';
 import { effectWith } from './effectWith';
-import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
+import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator, createThrottleOperator } from './operators';
 import { ExcludeSkipped, SignalLike, SignalValues, SKIPPED } from './types';
 
 export interface ComputedWithOptions {
@@ -23,6 +23,13 @@ export type ComputedWithSignal<T> = Signal<T> & {
    * Returns the initial signal value instantly, then debounces future value changes.
    */
   debounce(delay: number): ComputedWithSignal<T>;
+
+  /**
+   * Rate-limit value changes by time window.
+   *
+   * Returns the initial signal value instantly, then throttles future value changes.
+   */
+  throttle(duration: number): ComputedWithSignal<T>;
 
   /**
    * Returns `SKIPPED` for the first N computations, then passes through subsequent values as-is.
@@ -102,6 +109,11 @@ function lift<T>(
         effectRefs.push(effectWith(source)
           .debounce(delay)
           .run(value => output.set(value), { injector: options?.injector, untracked: true }));
+        return lift(output, options, effectRefs);
+      },
+      throttle(duration: number) {
+        const throttle = createThrottleOperator<T>(duration);
+        const output = pipe(source, value => throttle(value) ? value : SKIPPED as Extract<T, typeof SKIPPED>, options);
         return lift(output, options, effectRefs);
       },
       filter(predicate: (value: ExcludeSkipped<T>) => boolean) {

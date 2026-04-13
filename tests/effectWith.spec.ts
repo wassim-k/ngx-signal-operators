@@ -422,6 +422,74 @@ describe('effectWith', () => {
     });
   }));
 
+  it('should support the throttle operator to rate-limit effect runs', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(10);
+      const mockFn = vitest.fn();
+
+      effectWith(source).throttle(1000).run(value => {
+        mockFn(value);
+      });
+
+      // Initial value passes through immediately.
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(10);
+
+      // Value during window is ignored.
+      source.set(20);
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Window expires; next value passes through.
+      tick(1000);
+      source.set(30);
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(30);
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+  }));
+
+  it('should throw when throttle duration is 0 or negative', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(0);
+      expect(() => effectWith(source).throttle(0)).toThrow('Throttle duration must be greater than 0.');
+      expect(() => effectWith(source).throttle(-1)).toThrow('Throttle duration must be greater than 0.');
+    });
+  }));
+
+  it('should work with an operator pipeline using throttle', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(5);
+      const mockFn = vitest.fn();
+
+      effectWith(source)
+        .filter(value => value % 2 === 0)
+        .throttle(500)
+        .run(value => {
+          mockFn(value);
+        });
+
+      // Initial value 5 is odd: filtered out.
+      flush();
+      expect(mockFn).not.toHaveBeenCalled();
+
+      source.set(6); // Even, passes filter, passes throttle.
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(6);
+
+      source.set(8); // Even, passes filter, throttled.
+      flush();
+      expect(mockFn).toHaveBeenCalledTimes(1);
+
+      // Window expires; next even value passes through.
+      tick(500);
+      source.set(10);
+      flush();
+      expect(mockFn).toHaveBeenCalledWith(10);
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+  }));
+
   it('should use custom equality for objects with distinct', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal<{ id: number, name: string } | typeof SKIPPED>(SKIPPED);

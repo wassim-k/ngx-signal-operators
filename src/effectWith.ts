@@ -1,5 +1,5 @@
 import { CreateEffectOptions, effect, EffectCleanupRegisterFn, EffectRef, signal, untracked } from '@angular/core';
-import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator } from './operators';
+import { createDistinctOperator, createPairOperator, createSkipOperator, createTakeOperator, createThrottleOperator } from './operators';
 import { ExcludeSkipped, SignalLike, SignalValues, SKIPPED } from './types';
 
 type EffectPipelineOperator<T, R> = (next: EffectPipelineNext<R>) => EffectPipelineNext<T>;
@@ -56,6 +56,21 @@ export class EffectPipeline<T> {
         }
       });
     }));
+  }
+
+  /**
+   * Rate-limit effect runs by time window.
+   *
+   * Passes through the first value immediately, then ignores subsequent values
+   * for the specified duration.
+   */
+  public throttle(duration: number): EffectPipeline<T> {
+    const throttle = createThrottleOperator<T>(duration);
+    return this.pipe(next => (value, ctx) => {
+      if (throttle(value)) {
+        next(value, ctx);
+      }
+    });
   }
 
   /**

@@ -382,6 +382,68 @@ describe('computedWith', () => {
     });
   }));
 
+  it('should support .throttle to rate-limit value changes', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(100);
+      const output = computedWith(source).throttle(1000);
+
+      // Initial value is available immediately.
+      expect(output()).toBe(100);
+
+      // Tick past the initial throttle window.
+      tick(1000);
+
+      // First change passes through immediately.
+      source.set(200);
+      tick();
+      expect(output()).toBe(200);
+
+      // Changes during the window are ignored.
+      source.set(300);
+      tick();
+      expect(output()).toBe(200);
+
+      // Window expires; next change passes through.
+      tick(1000);
+      source.set(400);
+      tick();
+      expect(output()).toBe(400);
+    });
+  }));
+
+  it('should throw when .throttle duration is 0 or negative', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(0);
+      expect(() => computedWith(source).throttle(0)).toThrow('Throttle duration must be greater than 0.');
+      expect(() => computedWith(source).throttle(-1)).toThrow('Throttle duration must be greater than 0.');
+    });
+  }));
+
+  it('should chain .throttle with other operators', fakeAsync(() => {
+    runInInjectionContext(injector, () => {
+      const source = signal(2);
+      const output = computedWith(source)
+        .throttle(500)
+        .map(value => value * 10);
+
+      expect(output()).toBe(20);
+      tick(500);
+
+      source.set(3);
+      tick();
+      expect(output()).toBe(30);
+
+      source.set(4);
+      tick();
+      expect(output()).toBe(30);
+
+      tick(500);
+      source.set(5);
+      tick();
+      expect(output()).toBe(50);
+    });
+  }));
+
   it('should use custom equality for objects with distinct', fakeAsync(() => {
     runInInjectionContext(injector, () => {
       const source = signal<{ id: number, name: string } | typeof SKIPPED>(SKIPPED);
